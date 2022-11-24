@@ -1,0 +1,112 @@
+# Copyright IBM Inc. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Authors:
+#  Vassilis Vassiliadis
+
+# For more information see our sum-numbers tutorial at https://st4sd.github.io/overview/tutorial/
+
+# `variables` contain the platform/stage scopes of variables which
+# components can override
+variables:
+  default:
+    global:
+      numberOfPoints: 3
+    stages:
+      0:
+        my_random_seed: ""
+      2:
+        addToSum: 10
+
+  openshift:
+    stages:
+      2:
+        addToSum: -5
+
+blueprint:
+  default:
+    global:
+      command:
+        environment: environment
+
+  openshift:
+    global:
+      resourceRequest:
+        memory: 100Mi
+      resourceManager:
+        config:
+          backend: kubernetes
+        kubernetes:
+          image: quay.io/st4sd/official-base/st4sd-runtime-core
+
+  scafellpike:
+    global:
+      resourceManager:
+        config:
+          backend: lsf
+
+    stages:
+      1:
+        resourceRequest:
+            memory: 150Mi
+
+environments:
+  default:
+    # Defining 'default.environment' here sets the default env a job uses. If this wasn't defined, the job would use the
+    # same env as the Flow process (ie: the same as elaunch.py)
+    environment:
+      DEFAULTS: PATH:LD_LIBRARY_PATH
+      PATH: $PATH
+      LD_LIBRARY_PATH: $LD_LIBRARY_PATH
+
+  openshift:
+    environment:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+
+components: 
+- stage: 0
+  name: GenerateInput
+  command: 
+    executable: "bin/generate_input_file.py"
+    arguments: "%(numberOfPoints)s  %(my_random_seed)s"
+
+
+- stage: 1
+  name: ExtractRow
+  command:
+    executable: "bin/extract_row.py"
+    arguments: "stage0.GenerateInput/output.csv:ref %(replica)s"
+  references:
+    - "stage0.GenerateInput/output.csv:ref"
+  workflowAttributes:
+    replicate: "%(numberOfPoints)s"
+
+- stage: 1
+  name: PartialSum
+  command:
+    executable: "bin/sum.py"
+    arguments: "ExtractRow:output"
+  references:
+    - "ExtractRow:output"
+
+- stage: 2
+  name: Sum
+  command:
+    executable: "bin/sum.py"
+    arguments: "stage1.PartialSum:output %(addToSum)s"
+  references:
+    - "stage1.PartialSum:output"
+  workflowAttributes:
+    aggregate: True
+
+- stage: 3
+  name: Cat
+  command:
+    executable: "cat"
+    arguments: "cat_me.txt"
+  references:
+    - "data/cat_me.txt:copy"
+
+output:
+  TotalSum:
+    data-in: "stage2.Sum/out.stdout:copy"
