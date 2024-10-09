@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Copyright IBM Inc. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
